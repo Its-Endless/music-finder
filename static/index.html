@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Shazam Clone</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: white;
+      text-align: center;
+      padding-top: 80px;
+    }
+    button {
+      padding: 15px 30px;
+      background: #ff0066;
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      color: white;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+    button:hover {
+      background: #ff3385;
+    }
+    #status {
+      margin-top: 30px;
+      font-size: 20px;
+    }
+    #result {
+      margin-top: 20px;
+      font-size: 22px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🎵 Shazam Clone</h1>
+  <p>Click the button and let the browser record 5 seconds of audio.</p>
+
+  <button id="recordBtn">🎤 Record & Identify</button>
+
+  <div id="status"></div>
+  <div id="result"></div>
+
+  <script>
+    const recordBtn = document.getElementById("recordBtn");
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("result");
+
+    let mediaRecorder;
+    let audioChunks = [];
+
+    recordBtn.onclick = async () => {
+      resultEl.innerHTML = "";
+      statusEl.innerHTML = "Requesting microphone...";
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        statusEl.innerHTML = "Recording...";
+
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+        mediaRecorder.onstop = async () => {
+          statusEl.innerHTML = "Processing audio...";
+
+          // Create blob
+          const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+
+          // Convert to File so Flask can handle it
+          const file = new File([audioBlob], "browser_recording.webm", { type: "audio/webm" });
+
+          const formData = new FormData();
+          formData.append("file", file);
+
+          statusEl.innerHTML = "Sending to server...";
+
+          // Send to backend
+          const res = await fetch("http://127.0.0.1:5000/match", {
+            method: "POST",
+            body: formData
+          });
+
+          const data = await res.json();
+
+          if (data.error) {
+            resultEl.innerHTML = "❌ Error: " + data.error;
+          } else if (data.top_candidates.length === 0) {
+            resultEl.innerHTML = "No match found.";
+          } else {
+            const top = data.top_candidates[0];
+            resultEl.innerHTML =
+              `Matched: <span style="color:#00ffcc">${top.name}</span><br>` +
+              `Score: ${top.score} (normalized: ${top.score_normalized})<br>`;
+          }
+
+          statusEl.innerHTML = "";
+        };
+
+        mediaRecorder.start();
+
+        // Stop after 5 seconds
+        setTimeout(() => mediaRecorder.stop(), 5000);
+
+      } catch (err) {
+        statusEl.innerHTML = "Microphone access denied.";
+      }
+    };
+  </script>
+</body>
+</html>
